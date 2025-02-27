@@ -1,0 +1,246 @@
+---
+title: "Lista3Planejamento"
+format: pdf
+editor: visual
+---
+
+## Questão 1
+
+```{r}
+#| echo: false
+library(knitr)
+opts_chunk$set(comment = NA, message = FALSE, warning = FALSE)
+
+```
+
+```{r}
+#install.packages("FrF2")
+library(FrF2)
+
+planej = FrF2(nfactors = 2,
+nruns = 2^2,
+factor.names =c("B", "A"), # Invertendo a ordem para se adequar a tabela da questão
+replications = 3,
+randomize = FALSE)
+
+rendimento = c(1.30,1.26,1.05,1.52,
+               1.19,1.21,1.00,1.56,
+               1.08,1.19,1.05,1.55)
+
+planej = add.response(planej, rendimento)
+knitr::kable(planej)
+```
+
+```{r}
+modelo <- lm(rendimento ~ A * B, data =
+planej)
+
+anova <-  aov(modelo)
+
+summary(anova)
+```
+
+O teste ANOVA indica que os fatores A e B, juntamente com sua interação, tem um impacto significativo no ganho de peso.
+
+## Representação gráfica
+
+```{r}
+
+library(ggplot2)
+
+# Criando a combinação de cada fator três vezes 
+A <- rep(c("A0", "A1"), each = 6) # each: repete cada item
+B <- rep(c("B0", "B1", "B0", "B1"), each = 3) # times: repete todo o vetor duas vezes
+
+tratamentos <- paste0(A,"_", B)
+
+ganho_de_peso <- c(1.30, 1.19, 1.08, # Primeira combinação
+                   1.26, 1.21, 1.19, # Segunda combinação
+                   1.05, 1.00, 1.05, # Terceira combinação
+                   1.52, 1.56, 1.55  # Quarta combinação
+                   ) 
+
+dados <- data.frame(tratamentos, ganho_de_peso)
+
+ggplot(dados, aes(x=tratamentos, y=ganho_de_peso, fill=tratamentos)) +
+  geom_boxplot()
+```
+
+## Avaliação dos pressupostos do modelo
+
+### Hipótese de normalidade:
+
+$H_0$: os dados seguem uma distribuição normal
+
+$H_1$: os dados não seguem uma distribuição normal
+
+```{r}
+shapiro.test(modelo$residuals)
+```
+
+Como p-valor do teste de Shapiro foi de 0.337, ou seja, maior que o nível de 5% de significância não rejeitamos a hipótese nula, portanto temos indícios para acreditar que os dados seguem uma distribuição normal.
+
+### Hipótese de homocedasticidade:
+
+$H_0$: A variância é constante (homocedasticidade)
+
+$H_1$: A variância não é constante (heterocedasticidade)
+
+```{r}
+with(planej, bartlett.test(anova$residuals~A))
+with(planej, bartlett.test(anova$residuals~B))
+tratamentos<-rep(c(paste("T",1:4)),e=3)
+with(planej, bartlett.test(anova$residuals~tratamentos))
+```
+
+Para os fatores A e B, os p-valores (0.02205 e 0.04612, respectivamente) são inferiores a 0.05, indicando que há evidências para rejeitar a hipótese nula de homogeneidade de variâncias, ou seja, as variâncias não são homogêneas entre os grupos desses fatores.
+
+Já para o fator tratamentos, o p-valor (0.2362) é superior a 0.05, indicando que não há evidências suficientes para rejeitar a hipótese nula, sugerindo que as variâncias entre os grupos desse fator são homogêneas.
+
+### Independências das amostras::
+
+$H_0$: Não há autocorrelação positiva nos resíduos
+
+$H_1$: Existe autocorrelação positiva nos resíduos
+
+```{r}
+lmtest::dwtest(anova)
+```
+
+O p-valor ser igual a 0.1707 indica que não há evidências estatísticas suficientes para rejeitar a hipótese nula de ausência de autocorrelação nos resíduos.
+
+## Teste de comparações
+
+```{r}
+library(ExpDes.pt)
+
+with(planej, fat2.dic(A,B, rendimento,
+                      mcomp="tukey",
+                      fac.names = c("B","A")))
+
+```
+
+O teste de comparação entre os tratamentos sugere o que já era possivel de ser visto na análise gráfica, os únicos fatores que podem ser ditos estatísticamente iguais são os fatores "B dentro do nivel -1 de A" ou seja $A_0 B_0$ e $A_0 B_1$.
+
+# Questão 2
+
+```{r}
+#install.packages("rsm")
+library(rsm)
+
+dados <- data.frame(
+  x1 = c(-1, -1, 1, 1, 0, 0, 0, 0, 0),
+  x2 = c(-1, 1, -1, 1, 0, 0, 0, 0, 0),
+  Y = c(76.5, 77.0, 78.0, 79.5, 79.9, 80.3, 80.0, 79.7, 79.8)
+)
+
+modelo <- rsm(Y ~ FO(x1,x2) + TWI(x1,x2), data = dados)
+summary(modelo)
+anova(modelo)
+```
+
+```{r, eval=FALSE, echo=FALSE}
+# Superfície de resposta
+library(ggplot2)
+library(plotly)
+
+grid <- expand.grid(
+  x1 = seq(-1, 1, length.out = 100),
+  x2 = seq(-1, 1, length.out = 100)
+)
+grid$Y_pred <- predict(modelo1, newdata = grid)
+
+# Gráfico da superfície de resposta
+ggplot(grid, aes(x = x1, y = x2, z = Y_pred)) +
+  geom_contour_filled() +
+  labs(title = "Superfície de Resposta", x = "x1 (Tempo)", y = "x2 (Temperatura)", fill = "Resposta Y") +
+  theme_minimal()
+
+# Criar grid para a superfície de resposta
+x1_seq <- seq(-1, 1, length.out = 30)
+x2_seq <- seq(-1, 1, length.out = 30)
+grid <- expand.grid(x1 = x1_seq, x2 = x2_seq)
+grid$Y_pred <- predict(modelo, newdata = grid)
+
+# Transformar em matriz para o persp()
+z_matrix <- matrix(grid$Y_pred, nrow = length(x1_seq), byrow = TRUE)
+
+# Gráfico 3D da superfície de resposta
+persp(
+  x1_seq, x2_seq, z_matrix,
+  theta = 30, phi = 20, # Ajustando o angulo da imagem
+  expand = 0.6,
+  col = terrain.colors(50),
+  contours = "colors",
+  xlab = "x1 (Tempo)", ylab = "x2 (Temperatura)", zlab = "Resposta Y",
+  main = "Superfície de Resposta"
+)
+```
+
+```{r}
+modelo1 <- rsm(Y ~ FO(x1,x2), data = dados)
+
+contour(modelo1, ~x1 + x2,
+        image = TRUE,
+        xlabs = c("x1 (Tempo)", "x2 (Temperatura)"))
+
+persp(modelo1, ~x1 + x2,
+      theta = 30, phi = 20,
+      expand = 0.6,
+      col = terrain.colors(50), contours = "colors",
+      zlab = "Aumento de peso", xlabs = c("x1 (Tempo)", "x2 (Temperatura)"))
+
+```
+
+# Questão 3
+
+```{r}
+
+rendimento = c(54, 85, 49, 62, 64, 94, 56, 70, 52, 87, 49, 64, 64, 94, 58, 73)
+
+planej = FrF2(nfactors = 4,
+nruns = 2^4,
+factor.names =c("temperatura" ,"catalisador", "concentracao", "ph"),
+replications = 1,
+randomize = FALSE)
+
+planej = add.response(planej, rendimento)
+knitr::kable(planej)
+
+
+```
+
+```{r}
+modelo <- lm(rendimento ~ ., data =
+planej)
+
+anova <-  aov(modelo)
+
+summary(anova)
+```
+
+```{r}
+shapiro.test(modelo$residuals)
+```
+
+```{r}
+with(planej, bartlett.test(anova$residuals~temperatura))
+with(planej, bartlett.test(anova$residuals~catalisador))
+with(planej, bartlett.test(anova$residuals~concentracao))
+with(planej, bartlett.test(anova$residuals~ph))
+```
+
+```{r}
+lmtest::dwtest(anova)
+```
+
+```{r}
+with(planej, fat2.dic(temperatura,catalisador,concentracao,ph, rendimento,
+                      mcomp="tukey"))
+
+```
+
+```{r}
+teste_comparacao <- TukeyHSD(anova)
+plot(teste_comparacao)
+```
